@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+server_out.txt
+server_err.txt
+.prisma/
+*.log
+.DS_Store
+Thumbs.db

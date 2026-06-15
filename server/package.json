@@ -1,0 +1,39 @@
+{
+  "name": "vaics-itsm-server",
+  "version": "1.0.0",
+  "description": "VAICS ITSM - Express.js Backend Server",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:seed": "node prisma/seed.js",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+  },
+  "keywords": [
+    "itsm",
+    "ticketing",
+    "vaics"
+  ],
+  "author": "VAICS",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "helmet": "^8.2.0",
+    "imap": "^0.8.19",
+    "joi": "^18.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mailparser": "^3.9.9",
+    "morgan": "^1.11.0",
+    "prisma": "^5.22.0",
+    "uuid": "^14.0.0"
+  }
+}

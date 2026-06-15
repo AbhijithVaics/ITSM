@@ -1,0 +1,716 @@
+// ═══════════════════════════════════════════════════════════════════════
+// VAICS ITSM — Prisma Schema (PostgreSQL)
+// Reference source: Combodo iTop XML Data Models (ITOP_REFERENCE.md)
+// Iteration: 2 / 10
+// ═══════════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════════════════
+
+enum TicketType {
+  INCIDENT
+  SERVICE_REQUEST
+  CHANGE
+  PROBLEM
+}
+
+enum UserRole {
+  ADMIN
+  AGENT
+  MANAGER
+  CHANGE_MANAGER
+  USER
+  READ_ONLY
+}
+
+enum Origin {
+  IN_PERSON
+  CHAT
+  MAIL
+  PHONE
+  PORTAL
+  MONITORING
+}
+
+enum Impact {
+  LEVEL_1 // Organization-wide
+  LEVEL_2 // Group/Department
+  LEVEL_3 // Individual
+}
+
+enum Urgency {
+  LEVEL_1 // Critical
+  LEVEL_2 // High
+  LEVEL_3 // Medium
+  LEVEL_4 // Low
+}
+
+enum Priority {
+  P1 // Critical
+  P2 // High
+  P3 // Medium
+  P4 // Low
+}
+
+enum ResolutionCode {
+  ASSISTANCE
+  OTHER
+  SOFTWARE_PATCH
+  TRAINING
+  HARDWARE_REPAIR
+  SYSTEM_UPDATE
+  BUG_FIXED
+}
+
+enum Satisfaction {
+  LEVEL_1 // Very unsatisfied
+  LEVEL_2 // Unsatisfied
+  LEVEL_3 // Satisfied
+  LEVEL_4 // Very satisfied
+}
+
+enum ServiceStatus {
+  IMPLEMENTATION
+  PRODUCTION
+  OBSOLETE
+}
+
+enum SLTMetric {
+  TTO
+  TTR
+}
+
+enum SLTUnit {
+  HOURS
+  MINUTES
+}
+
+enum ChangeOutage {
+  YES
+  NO
+}
+
+enum CIStatus {
+  IMPLEMENTATION
+  PRODUCTION
+  OBSOLETE
+}
+
+enum CIRelationshipType {
+  CONNECTS_TO
+  DEPENDS_ON
+  CONTAINS
+  USES
+  RUNS_ON
+  LOCATED_AT
+  MANAGED_BY
+  CONNECTED_TO
+  BACKED_BY
+}
+
+enum CommentVisibility {
+  PUBLIC   // Visible to caller (public_log)
+  PRIVATE  // Agent internal notes (private_log)
+}
+
+enum ContractType {
+  CUSTOMER  // CustomerContract
+  PROVIDER  // ProviderContract
+}
+
+// ═══════════════════════════════════════════════════════════
+// CORE — ORGANIZATION
+// ═══════════════════════════════════════════════════════════
+
+model Organization {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  code      String?
+  status    ServiceStatus @default(PRODUCTION)
+  parentId  Int?
+  parent    Organization?     @relation("OrgHierarchy", fields: [parentId], references: [id])
+  children  Organization[]    @relation("OrgHierarchy")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  teams         Team[]
+  tickets       Ticket[]
+  services      Service[]
+  slas          SLA[]
+  contracts     CustomerContract[]
+  webhooks      Webhook[]
+  configurationItems CI[]
+
+  @@map("organizations")
+}
+
+// ═══════════════════════════════════════════════════════════
+// CORE — USER, TEAM
+// ═══════════════════════════════════════════════════════════
+
+model User {
+  id              Int      @id @default(autoincrement())
+  email           String   @unique
+  password        String   // Hashed
+  firstName       String   @default("")
+  lastName        String   @default("")
+  name            String   // Computed: firstName + lastName
+  role            UserRole @default(USER)
+  phone           String?
+  mobilePhone     String?
+  function        String?
+  notify          Boolean  @default(true)
+  isActive        Boolean  @default(true)
+  organizationId  Int
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  managerId       Int?
+  manager         User?        @relation("UserManager", fields: [managerId], references: [id])
+  subordinates    User[]       @relation("UserManager")
+  location        String?
+  lastLogin       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  teamMemberships TeamMember[]
+  assignedTickets Ticket[]   @relation("AgentTickets")
+  callerTickets   Ticket[]   @relation("CallerTickets")
+  approverTickets Ticket[]   @relation("ApproverTickets")
+  workOrderAssignments WorkOrder[] @relation("WorkOrderAgent")
+  approvalEntries       Approval[]  @relation("ApprovalApprover")
+  ticketContactEntries  TicketContact[] @relation("TicketContactUser")
+  comments              Comment[]
+  historyEntries        AuditTrail[]
+  notifications         Notification[]
+
+  @@map("users")
+}
+
+model Team {
+  id              Int      @id @default(autoincrement())
+  name            String
+  email           String?
+  organizationId  Int
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  members        TeamMember[]
+  assignedTickets Ticket[]
+  workOrders     WorkOrder[]
+
+  @@unique([name, organizationId])
+  @@map("teams")
+}
+
+model TeamMember {
+  id      Int @id @default(autoincrement())
+  userId  Int
+  user    User @relation(fields: [userId], references: [id])
+  teamId  Int
+  team    Team @relation(fields: [teamId], references: [id])
+  role    String? // e.g., "leader", "member", "manager"
+  
+  @@unique([userId, teamId])
+  @@map("team_members")
+}
+
+// ═══════════════════════════════════════════════════════════
+// TICKETING — TICKET (Single table, type-discriminated)
+// ═══════════════════════════════════════════════════════════
+
+model Ticket {
+  id              Int        @id @default(autoincrement())
+  ref             String     @unique
+  type            TicketType
+  status          String     @default("new") // Validated by state machine engine
+
+  // ── Core fields ──
+  title           String
+  description     String     @default("")
+  priority        Priority   @default(P4)
+  impact          Impact?    
+  urgency         Urgency?
+  origin          Origin?    
+
+  // ── Relationships ──
+  organizationId  Int
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  callerId        Int?
+  caller          User?        @relation("CallerTickets", fields: [callerId], references: [id])
+  teamId          Int?
+  team            Team?        @relation(fields: [teamId], references: [id])
+  agentId         Int?
+  agent           User?        @relation("AgentTickets", fields: [agentId], references: [id])
+  approverId      Int?
+  approver        User?        @relation("ApproverTickets", fields: [approverId], references: [id])
+
+  // ── Service / SLA ──
+  serviceId              Int?
+  service                Service?         @relation(fields: [serviceId], references: [id])
+  serviceSubcategoryId   Int?
+  serviceSubcategory     ServiceSubcategory? @relation(fields: [serviceSubcategoryId], references: [id])
+  ttoDeadline            DateTime?
+  ttrDeadline            DateTime?
+  ttoPassed              Boolean?
+  ttrPassed              Boolean?
+  ttoOverrun             Int?     // seconds past deadline
+  ttrOverrun             Int?     // seconds past deadline
+  ttoTimeSpent           Int?     // seconds
+  ttrTimeSpent           Int?     // seconds
+
+  // ── Dates ──
+  startDate       DateTime    @default(now())
+  endDate         DateTime?
+  assignmentDate  DateTime?
+  resolutionDate  DateTime?
+  closeDate       DateTime?
+  lastPendingDate DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // ── Resolution ──
+  resolutionCode  ResolutionCode?
+  solution        String?
+  pendingReason   String?
+  timeSpent       Int?       // total working seconds to resolve
+
+  // ── UserRequest / Incident specific ──
+  requestType     String?    // "incident" | "service_request"
+  escalationFlag  Boolean    @default(false)
+  escalationReason String?
+
+  // ── Change specific ──
+  reason          String?    // reason for change
+  changeCategory  String?    // hardware, software, network, etc.
+  outage          ChangeOutage?
+  fallbackPlan    String?    // rollback plan
+  acceptanceDate  DateTime?  // NormalChange
+  approvalDate    DateTime?  // ApprovedChange
+  approvalComment String?
+
+  // ── Problem specific ──
+  product         String?    // affected product
+
+  // ── User satisfaction ──
+  userSatisfaction Satisfaction?
+  userComment      String?
+
+  // ── Parent/Child hierarchy (unified across all ticket types) ──
+  parentTicketId  Int?
+  parentTicket    Ticket?       @relation("TicketHierarchy", fields: [parentTicketId], references: [id])
+  childTickets    Ticket[]      @relation("TicketHierarchy")
+
+  // ── Relations ──
+  comments        Comment[]
+  historyEntries  AuditTrail[]
+  workOrders      WorkOrder[]
+  linkedCIs       CIRelatedTicket[]
+  linkedContacts  TicketContact[]
+  notifications   Notification[]
+  linkedApprovals Approval[]
+
+  @@index([type, status])
+  @@index([organizationId])
+  @@index([callerId])
+  @@index([agentId])
+  @@index([teamId])
+  @@index([ref])
+  @@map("tickets")
+}
+
+// ═══════════════════════════════════════════════════════════
+// TICKETING — COMMENTS (Public & Private logs)
+// ═══════════════════════════════════════════════════════════
+
+model Comment {
+  id          Int       @id @default(autoincrement())
+  ticketId    Int
+  ticket      Ticket    @relation(fields: [ticketId], references: [id])
+  authorId    Int
+  author      User      @relation(fields: [authorId], references: [id])
+  content     String    // HTML content
+  visibility  CommentVisibility @default(PUBLIC)
+  createdAt   DateTime  @default(now())
+
+  @@index([ticketId])
+  @@index([ticketId, visibility])
+  @@map("comments")
+}
+
+// ═══════════════════════════════════════════════════════════
+// TICKETING — AUDIT TRAIL
+// ═══════════════════════════════════════════════════════════
+
+model AuditTrail {
+  id          Int       @id @default(autoincrement())
+  ticketId    Int
+  ticket      Ticket    @relation(fields: [ticketId], references: [id])
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  actionType  String    // 'transition' | 'field_change' | 'comment' | 'assignment' | 'ci_link'
+  fromValue   String?
+  toValue     String?
+  stimulus    String?   // e.g., "ev_assign", "ev_resolve"
+  fieldName   String?   // for field changes
+  metadata    Json?     // additional context
+  createdAt   DateTime  @default(now())
+
+  @@index([ticketId])
+  @@index([ticketId, createdAt])
+  @@map("audit_trail")
+}
+
+// ═══════════════════════════════════════════════════════════
+// TICKETING — WORK ORDER
+// ═══════════════════════════════════════════════════════════
+
+model WorkOrder {
+  id          Int        @id @default(autoincrement())
+  name        String
+  status      String     @default("open") // open | closed
+  description String     @default("")
+  ticketId    Int?
+  ticket      Ticket?    @relation(fields: [ticketId], references: [id])
+  teamId      Int
+  team        Team       @relation(fields: [teamId], references: [id])
+  agentId     Int?
+  agent       User?      @relation("WorkOrderAgent", fields: [agentId], references: [id])
+  startDate   DateTime   @default(now())
+  endDate     DateTime?
+  log         String?    // CaseLog entries (JSON array)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([ticketId])
+  @@map("work_orders")
+}
+
+// ═══════════════════════════════════════════════════════════
+// TICKETING — APPROVAL
+// ═══════════════════════════════════════════════════════════
+
+model Approval {
+  id          Int       @id @default(autoincrement())
+  ticketId    Int
+  ticket      Ticket    @relation(fields: [ticketId], references: [id])
+  approverId  Int
+  approver    User      @relation("ApprovalApprover", fields: [approverId], references: [id])
+  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  comment     String?
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  @@unique([ticketId, approverId])
+  @@map("approvals")
+}
+
+// ═══════════════════════════════════════════════════════════
+// TICKETING — LINK TABLES
+// ═══════════════════════════════════════════════════════════
+
+model TicketContact {
+  id        Int        @id @default(autoincrement())
+  ticketId  Int
+  ticket    Ticket     @relation(fields: [ticketId], references: [id])
+  contactId Int
+  contact   User       @relation("TicketContactUser", fields: [contactId], references: [id])
+  role      String?    // "manual" | "computed" | "do_not_notify"
+  roleCode  String?    // Additional role info
+
+  @@unique([ticketId, contactId])
+  @@map("ticket_contacts")
+}
+
+// ═══════════════════════════════════════════════════════════
+// SERVICE MANAGEMENT
+// ═══════════════════════════════════════════════════════════
+
+model Service {
+  id            Int           @id @default(autoincrement())
+  name          String
+  organizationId Int
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  description   String?
+  status        ServiceStatus @default(IMPLEMENTATION)
+  icon          String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  subcategories    ServiceSubcategory[]
+  contracts        ContractToService[]
+  tickets          Ticket[]
+  configurationItems CIRelatedService[]
+
+  @@unique([name, organizationId])
+  @@map("services")
+}
+
+model ServiceSubcategory {
+  id          Int           @id @default(autoincrement())
+  name        String
+  description String?
+  serviceId   Int
+  service     Service       @relation(fields: [serviceId], references: [id])
+  requestType String?       // "incident" | "service_request"
+  status      ServiceStatus @default(IMPLEMENTATION)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tickets     Ticket[]
+
+  @@unique([name, serviceId])
+  @@map("service_subcategories")
+}
+
+model SLA {
+  id              Int           @id @default(autoincrement())
+  name            String
+  description     String?
+  organizationId  Int
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  targets         SLATarget[]
+  contractLinks   ContractToService[]
+
+  @@unique([name, organizationId])
+  @@map("slas")
+}
+
+model SLATarget {
+  id          Int       @id @default(autoincrement())
+  name        String
+  slaId       Int
+  sla         SLA       @relation(fields: [slaId], references: [id])
+  metric      SLTMetric // TTO or TTR
+  priority    Priority? // Target applies to this priority level
+  requestType String?   // "incident" | "service_request"
+  value       Int       // Target value
+  unit        SLTUnit   @default(MINUTES)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([slaId, metric, priority, requestType])
+  @@map("sla_targets")
+}
+
+model CustomerContract {
+  id              Int           @id @default(autoincrement())
+  name            String
+  organizationId  Int
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  providerId      Int           // Organization ID of the provider
+  description     String?
+  startDate       DateTime?
+  endDate         DateTime?
+  cost            String?
+  costCurrency    String?
+  status          ServiceStatus @default(PRODUCTION)
+  type            ContractType  @default(CUSTOMER)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  serviceLinks    ContractToService[]
+
+  @@unique([name, organizationId])
+  @@map("customer_contracts")
+}
+
+model ContractToService {
+  id                 Int              @id @default(autoincrement())
+  customerContractId Int
+  customerContract   CustomerContract @relation(fields: [customerContractId], references: [id])
+  serviceId          Int
+  service            Service          @relation(fields: [serviceId], references: [id])
+  slaId              Int?
+  sla                SLA?             @relation(fields: [slaId], references: [id])
+
+  @@unique([customerContractId, serviceId])
+  @@map("contract_to_services")
+}
+
+// ═══════════════════════════════════════════════════════════
+// CMDB — CONFIGURATION MANAGEMENT
+// ═══════════════════════════════════════════════════════════
+
+model CI {
+  id              Int         @id @default(autoincrement())
+  name            String
+  type            String      // Discriminator: SERVER, NETWORK_DEVICE, PC, APPLICATION, DATABASE, etc.
+  status          CIStatus    @default(PRODUCTION)
+  organizationId  Int
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  location        String?
+  serialNumber    String?
+  brand           String?
+  model           String?
+  version         String?
+  description     String?
+  ipAddress       String?
+  cpu             String?
+  ram             Int?        // MB
+  storage         Int?        // GB
+  os              String?
+  osVersion       String?
+  // Flexible attributes for different CI types
+  attributes      Json?       // Type-specific attributes
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  inboundRelationships  CIRelationship[] @relation("TargetCI")
+  outboundRelationships CIRelationship[] @relation("SourceCI")
+  // Ticket links
+  ticketLinks    CIRelatedTicket[]
+  // Service links
+  serviceLinks   CIRelatedService[]
+
+  @@index([type])
+  @@index([organizationId])
+  @@map("configuration_items")
+}
+
+model CIRelationship {
+  id              Int                @id @default(autoincrement())
+  sourceCIId      Int
+  sourceCI        CI                 @relation("SourceCI", fields: [sourceCIId], references: [id], map: "fk_ci_rel_source")
+  targetCIId      Int
+  targetCI        CI                 @relation("TargetCI", fields: [targetCIId], references: [id], map: "fk_ci_rel_target")
+  relationshipType CIRelationshipType
+  description     String?
+  createdAt       DateTime           @default(now())
+
+  @@unique([sourceCIId, targetCIId, relationshipType])
+  @@map("ci_relationships")
+}
+
+model CIRelatedTicket {
+  id        Int    @id @default(autoincrement())
+  ciId      Int
+  ci        CI     @relation(fields: [ciId], references: [id])
+  ticketId  Int
+  ticket    Ticket @relation(fields: [ticketId], references: [id])
+  impact    String? // "manual" | "computed"
+  createdAt DateTime @default(now())
+
+  @@unique([ciId, ticketId])
+  @@map("ci_related_tickets")
+}
+
+model CIRelatedService {
+  id        Int     @id @default(autoincrement())
+  ciId      Int
+  ci        CI      @relation(fields: [ciId], references: [id])
+  serviceId Int
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  @@unique([ciId, serviceId])
+  @@map("ci_related_services")
+}
+
+// ═══════════════════════════════════════════════════════════
+// SEPARATE TICKET TYPE EXTENSIONS (for type-specific queries)
+// ═══════════════════════════════════════════════════════════
+
+// These views/schemas map 1:1 to Ticket. We can also use them
+// if we want separate tables later. For now, all data is in Ticket.
+
+// Change-specific ticket data (stored in Ticket with type=CHANGE)
+// This model provides a dedicated view for change management.
+// Queries should filter Ticket WHERE type = 'CHANGE'.
+// @ignore: Not a separate table - use Ticket with type filter.
+model ChangeTicket {
+  id          Int    @id
+  ticketId    Int    @unique
+  // All fields are inherited from Ticket.
+  // Additional Change-specific fields stored on Ticket:
+  // reason, changeCategory, outage, fallbackPlan,
+  // acceptanceDate, approvalDate, approvalComment
+
+  @@map("change_tickets_view")
+}
+
+// Problem-specific ticket data (stored in Ticket with type=PROBLEM)
+// @ignore: Not a separate table - use Ticket with type filter.
+model Problem {
+  id          Int    @id
+  ticketId    Int    @unique
+  // All fields are inherited from Ticket.
+  // Additional Problem-specific fields stored on Ticket:
+  // product
+
+  @@map("problems_view")
+}
+
+// ═══════════════════════════════════════════════════════════
+// SEQUENCES — For ticket ref auto-generation
+// ═══════════════════════════════════════════════════════════
+
+model TicketCounter {
+  id       String @id     // "INCIDENT", "SERVICE_REQUEST", "CHANGE", "PROBLEM"
+  prefix   String
+  sequence Int    @default(0)
+
+  @@map("ticket_counters")
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════
+
+enum NotificationType {
+  TICKET_ASSIGNED
+  TICKET_UPDATED
+  APPROVAL_REQUESTED
+  APPROVAL_RESPONDED
+  COMMENT_ADDED
+  SLA_WARNING
+  SLA_BREACH
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType
+  title     String
+  message   String?
+  ticketId  Int?
+  ticket    Ticket?          @relation(fields: [ticketId], references: [id])
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// ═══════════════════════════════════════════════════════════
+// WEBHOOKS
+// ═══════════════════════════════════════════════════════════
+
+model Webhook {
+  id             Int      @id @default(autoincrement())
+  name           String
+  url            String
+  events         String[]
+  secret         String   @default("")
+  enabled        Boolean  @default(true)
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("webhooks")
+}
