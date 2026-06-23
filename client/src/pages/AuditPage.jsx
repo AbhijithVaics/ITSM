@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Table, Input, Tag, Typography, Space } from 'antd'
 import { api } from '../api/client'
 
 export default function AuditPage() {
@@ -7,8 +8,8 @@ export default function AuditPage() {
   const [filterTicketId, setFilterTicketId] = useState('')
   const [page, setPage] = useState(0)
   const [total, setTotal] = useState(0)
-  const limit = 50
   const navigate = useNavigate()
+  const limit = 50
 
   const load = useCallback(async () => {
     try {
@@ -24,41 +25,28 @@ export default function AuditPage() {
   useEffect(() => { load() }, [load])
 
   return (
-    <div className="audit-page">
-      <div className="page-header">
-        <h1>Audit Trail</h1>
-        <div className="header-controls">
-          <input className="search-input" placeholder="Filter by Ticket ID" value={filterTicketId} onChange={e => { setFilterTicketId(e.target.value); setPage(0) }} />
-        </div>
-      </div>
-
-      <table className="data-table">
-        <thead>
-          <tr><th>Time</th><th>User</th><th>Action</th><th>Field</th><th>Old Value</th><th>New Value</th><th>Ticket</th></tr>
-        </thead>
-        <tbody>
-          {entries.map(e => (
-            <tr key={e.id} className="clickable" onClick={() => navigate(`/tickets/${e.ticketId}`)}>
-              <td>{new Date(e.createdAt).toLocaleString()}</td>
-              <td>{e.user?.login}</td>
-              <td><span className="badge">{e.action}</span></td>
-              <td>{e.field}</td>
-              <td className="text-muted">{e.oldValue}</td>
-              <td className="text-muted">{e.newValue}</td>
-              <td>{e.ticketId}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {entries.length === 0 && <div className="empty-state">No audit entries found.</div>}
-
-      {total > limit && (
-        <div className="pagination">
-          <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="btn-secondary">Prev</button>
-          <span className="page-info">{page + 1} / {Math.ceil(total / limit)}</span>
-          <button disabled={page >= Math.ceil(total / limit) - 1} onClick={() => setPage(p => p + 1)} className="btn-secondary">Next</button>
-        </div>
-      )}
+    <div>
+      <Space style={{ marginBottom: 24 }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>Audit Trail</Typography.Title>
+        <Input.Search placeholder="Filter by Ticket ID" allowClear onSearch={v => { setFilterTicketId(v); setPage(0) }} style={{ width: 220 }} />
+      </Space>
+      <Table
+        dataSource={entries}
+        rowKey="id"
+        onRow={e => ({ onClick: () => navigate(`/tickets/${e.ticketId}`), style: { cursor: 'pointer' } })}
+        columns={[
+          { title: 'Time', dataIndex: 'createdAt', render: v => new Date(v).toLocaleString(), width: 180 },
+          { title: 'User', dataIndex: ['user', 'login'] },
+          { title: 'Action', dataIndex: 'action', render: v => <Tag>{v}</Tag> },
+          { title: 'Field', dataIndex: 'field' },
+          { title: 'Old Value', dataIndex: 'oldValue', render: v => <Typography.Text type="secondary">{v}</Typography.Text> },
+          { title: 'New Value', dataIndex: 'newValue', render: v => <Typography.Text type="secondary">{v}</Typography.Text> },
+          { title: 'Ticket', dataIndex: 'ticketId', render: v => <a onClick={e => { e.stopPropagation(); navigate(`/tickets/${v}`) }}>#{v}</a> },
+        ]}
+        pagination={{ current: page + 1, pageSize: limit, total, onChange: p => setPage(p - 1), showSizeChanger: false }}
+        size="middle"
+        locale={{ emptyText: 'No audit entries found.' }}
+      />
     </div>
   )
 }

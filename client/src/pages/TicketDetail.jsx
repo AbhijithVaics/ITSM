@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
+import { Card, Row, Col, Descriptions, Tabs, Tag, Select, Button, Input, List, Typography, Space, Timeline, Modal, Badge, message } from 'antd'
+import { CheckCircleOutlined, CloseCircleOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons'
 import { getTicket, getTransitions, transitionTicket, assignTicket, getComments, addComment, getPendingApprovals, respondApproval } from '../api/tickets'
 import { listUsers } from '../api/users'
 import { createWorkOrder } from '../api/workOrders'
 import { useAuth } from '../contexts/AuthContext'
+
+const PRIORITY_LABELS = { 1: 'Critical', 2: 'High', 3: 'Medium', 4: 'Low' }
+const PRIORITY_COLORS = { 1: '#ff4757', 2: '#ffa502', 3: '#ffdd00', 4: '#2ed573' }
+const TYPE_COLORS = { INCIDENT: '#ff4757', SERVICE_REQUEST: '#4f8cff', CHANGE: '#ffa502', PROBLEM: '#be5aff' }
 
 export default function TicketDetail() {
   const { id } = useParams()
@@ -33,7 +39,6 @@ export default function TicketDetail() {
       setTransitions(tc.transitions || [])
       setComments(Array.isArray(cm) ? cm : [])
       setApprovals(approvalsData)
-
       const [u, audit] = await Promise.all([
         listUsers().catch(() => []),
         fetchAudit(id),
@@ -48,10 +53,7 @@ export default function TicketDetail() {
       const res = await fetch(`http://localhost:4000/api/audit?ticketId=${ticketId}&limit=100`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('vaics_token')}` },
       })
-      if (res.ok) {
-        const data = await res.json()
-        return data.entries || []
-      }
+      if (res.ok) return (await res.json()).entries || []
     } catch {}
     return []
   }
@@ -60,227 +62,182 @@ export default function TicketDetail() {
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [comments])
 
   const handleTransition = async (t) => {
-    try { await transitionTicket(id, t); load() }
-    catch (e) { alert(e.message) }
+    try { await transitionTicket(id, t); load(); message.success(`Transitioned to ${t}`) }
+    catch (e) { message.error(e.message) }
   }
 
   const handleAssign = async (userId) => {
-    try { await assignTicket(id, userId); load() }
-    catch (e) { alert(e.message) }
+    try { await assignTicket(id, userId); load(); message.success('Assigned') }
+    catch (e) { message.error(e.message) }
   }
 
-  const handleAddComment = async (e) => {
-    e.preventDefault()
+  const handleAddComment = async () => {
     if (!newComment.trim()) return
     try {
       await addComment({ ticketId: Number(id), text: newComment, type: commentType })
       setNewComment('')
-      const cm = await getComments(id)
-      setComments(cm)
-    } catch (e) { alert(e.message) }
+      setComments(await getComments(id))
+    } catch (e) { message.error(e.message) }
   }
 
   const handleApproval = async (approvalId, status) => {
-    try { await respondApproval(approvalId, status); load() }
-    catch (e) { alert(e.message) }
+    try { await respondApproval(approvalId, status); load(); message.success(`Approval ${status}`) }
+    catch (e) { message.error(e.message) }
   }
 
-  const handleCreateWo = async (e) => {
-    e.preventDefault()
+  const handleCreateWo = async () => {
     if (!woSummary.trim()) return
     try {
       await createWorkOrder({ ticketId: Number(id), summary: woSummary })
-      setWoSummary('')
-      setShowNewWo(false)
-      const t = await getTicket(id)
-      setTicket(t)
-    } catch (e) { alert(e.message) }
+      setWoSummary(''); setShowNewWo(false)
+      setTicket(await getTicket(id))
+      message.success('Work order created')
+    } catch (e) { message.error(e.message) }
   }
 
-  if (!ticket) return <div className="loading">Loading...</div>
+  if (!ticket) return <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.45)' }}>Loading...</div>
 
   const isOverdue = ticket.ttrDeadline && new Date(ticket.ttrDeadline) < new Date()
+  const ticketApprovals = approvals.filter(a => a.ticketId === ticket.id)
 
   return (
-    <div className="ticket-detail">
-      <div className="detail-top">
-        <div>
-          <h1>{ticket.ref}</h1>
-          <h2>{ticket.title}</h2>
-        </div>
-        <div className="detail-badges">
-          <span className={`badge badge-${ticket.type?.toLowerCase()}`}>{ticket.type}</span>
-          <span className={`badge badge-status-${ticket.status}`}>{ticket.status}</span>
-          {isOverdue && <span className="badge badge-overdue">OVERDUE</span>}
-        </div>
-      </div>
+    <div>
+      <Row justify="space-between" align="top" style={{ marginBottom: 24 }}>
+        <Col>
+          <Typography.Text style={{ color: '#4f8cff', fontWeight: 700, fontSize: 16, display: 'block' }}>{ticket.ref}</Typography.Text>
+          <Typography.Title level={4} style={{ margin: 0 }}>{ticket.title}</Typography.Title>
+        </Col>
+        <Col>
+          <Space>
+            <Tag color={TYPE_COLORS[ticket.type]}>{ticket.type}</Tag>
+            <Tag>{ticket.status}</Tag>
+            {isOverdue && <Tag color="red">OVERDUE</Tag>}
+          </Space>
+        </Col>
+      </Row>
 
-      <div className="detail-grid">
-        <div className="detail-main">
-          <section className="detail-section">
-            <h3>Description</h3>
-            <p>{ticket.description}</p>
-          </section>
+      <Row gutter={24}>
+        <Col xs={24} lg={16}>
+          <Card size="small" style={{ marginBottom: 16 }}>
+            <Typography.Text strong style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 8 }}>Description</Typography.Text>
+            <Typography.Paragraph>{ticket.description}</Typography.Paragraph>
+          </Card>
 
           {transitions.length > 0 && (
-            <section className="detail-section">
-              <h3>Actions</h3>
-              <div className="transition-buttons">
-                {transitions.map(t => (
-                  <button key={t} className="btn-secondary" onClick={() => handleTransition(t)}>{t}</button>
-                ))}
-              </div>
-            </section>
+            <Card size="small" style={{ marginBottom: 16 }}>
+              <Typography.Text strong style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 8 }}>Actions</Typography.Text>
+              <Space wrap>
+                {transitions.map(t => <Button key={t} size="small" onClick={() => handleTransition(t)}>{t}</Button>)}
+              </Space>
+            </Card>
           )}
 
-          <section className="detail-section">
-            <div className="tab-bar">
-              <button className={`tab ${activeTab === 'comments' ? 'active' : ''}`} onClick={() => setActiveTab('comments')}>Communication</button>
-              <button className={`tab ${activeTab === 'workorders' ? 'active' : ''}`} onClick={() => setActiveTab('workorders')}>Work Orders ({ticket.workOrders?.length || 0})</button>
-              <button className={`tab ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => setActiveTab('audit')}>Audit Trail</button>
-            </div>
-
-            {activeTab === 'comments' && (
-              <>
-                <div className="comment-thread">
-                  {comments.length === 0 && <p className="empty-state">No comments yet</p>}
-                  {comments.map(c => (
-                    <div key={c.id} className={`comment ${c.type}`}>
-                      <div className="comment-header">
-                        <strong>{c.author?.login}</strong>
-                        <span className="comment-type-badge">{c.type}</span>
-                        <time>{new Date(c.createdAt).toLocaleString()}</time>
-                      </div>
-                      <div className="comment-text">{c.text}</div>
+          <Card>
+            <Tabs
+              activeKey={activeTab}
+              onChange={setActiveTab}
+              items={[
+                { key: 'comments', label: `Communication (${comments.length})`, children: (
+                  <div>
+                    <div style={{ maxHeight: 400, overflowY: 'auto', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {comments.length === 0 ? <Typography.Text type="secondary" style={{ textAlign: 'center', padding: 20 }}>No comments yet</Typography.Text> : comments.map(c => (
+                        <div key={c.id} style={{ padding: 12, background: 'rgba(255,255,255,0.04)', borderRadius: 8, border: c.type === 'private' ? '1px solid rgba(255,165,2,0.3)' : '1px solid rgba(255,255,255,0.06)' }}>
+                          <Space style={{ marginBottom: 4 }}>
+                            <Typography.Text strong style={{ fontSize: 12 }}>{c.author?.login}</Typography.Text>
+                            <Tag style={{ fontSize: 9, lineHeight: '16px' }}>{c.type}</Tag>
+                            <Typography.Text type="secondary" style={{ fontSize: 11 }}>{new Date(c.createdAt).toLocaleString()}</Typography.Text>
+                          </Space>
+                          <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{c.text}</div>
+                        </div>
+                      ))}
+                      <div ref={chatEnd} />
                     </div>
-                  ))}
-                  <div ref={chatEnd} />
-                </div>
-                <form className="comment-form" onSubmit={handleAddComment}>
-                  <textarea value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Add a comment..." />
-                  <div className="comment-form-controls">
-                    <select value={commentType} onChange={e => setCommentType(e.target.value)}>
-                      <option value="public">Public</option>
-                      <option value="private">Private</option>
-                    </select>
-                    <button type="submit" className="btn-primary">Send</button>
+                    <Space.Compact style={{ width: '100%' }}>
+                      <Select value={commentType} onChange={setCommentType} style={{ width: 100 }}>
+                        <Select.Option value="public">Public</Select.Option>
+                        <Select.Option value="private">Private</Select.Option>
+                      </Select>
+                      <Input.TextArea value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Add a comment..." rows={2} />
+                      <Button type="primary" icon={<SendOutlined />} onClick={handleAddComment}>Send</Button>
+                    </Space.Compact>
                   </div>
-                </form>
-              </>
-            )}
-
-            {activeTab === 'workorders' && (
-              <div className="wo-list">
-                {ticket.workOrders?.length === 0 && <p className="empty-state">No work orders</p>}
-                {ticket.workOrders?.map(wo => (
-                  <div key={wo.id} className="wo-item">
-                    <div className="wo-header">
-                      <strong>{wo.summary}</strong>
-                      <span className={`badge badge-status-${wo.status}`}>{wo.status}</span>
-                    </div>
-                    <div className="wo-meta">{wo.agent?.profile?.firstName} — {new Date(wo.createdAt).toLocaleDateString()}</div>
-                    {wo.description && <p className="wo-desc">{wo.description}</p>}
+                )},
+                { key: 'workorders', label: `Work Orders (${ticket.workOrders?.length || 0})`, children: (
+                  <List
+                    size="small"
+                    dataSource={ticket.workOrders || []}
+                    locale={{ emptyText: 'No work orders' }}
+                    renderItem={wo => (
+                      <List.Item>
+                        <List.Item.Meta
+                          title={<Space>{wo.summary} <Tag>{wo.status}</Tag></Space>}
+                          description={<>{wo.agent?.profile?.firstName} — {new Date(wo.createdAt).toLocaleDateString()}{wo.description && <><br/>{wo.description}</>}</>}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                )},
+                { key: 'audit', label: 'Audit Trail', children: (
+                  <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+                    {auditLog.length === 0 ? <Typography.Text type="secondary" style={{ textAlign: 'center', padding: 20, display: 'block' }}>No audit entries</Typography.Text> : (
+                      <Timeline items={auditLog.map(e => ({ children: <><strong>{e.user?.login}</strong> <Tag>{e.action}</Tag> <Typography.Text type="secondary">{new Date(e.createdAt).toLocaleString()}</Typography.Text><div style={{ fontSize: 12, fontFamily: 'monospace' }}>{e.field}: {e.oldValue} → {e.newValue}</div></> }))} />
+                    )}
                   </div>
-                ))}
-                {showNewWo ? (
-                  <form onSubmit={handleCreateWo} className="wo-form">
-                    <input value={woSummary} onChange={e => setWoSummary(e.target.value)} placeholder="Work order summary" />
-                    <div className="wo-form-actions">
-                      <button type="submit" className="btn-primary">Create</button>
-                      <button type="button" className="btn-secondary" onClick={() => setShowNewWo(false)}>Cancel</button>
-                    </div>
-                  </form>
-                ) : (
-                  <button className="btn-secondary" onClick={() => setShowNewWo(true)}>+ Add Work Order</button>
-                )}
-              </div>
-            )}
+                )},
+              ]}
+            />
+          </Card>
+        </Col>
 
-            {activeTab === 'audit' && (
-              <div className="audit-list">
-                {auditLog.length === 0 && <p className="empty-state">No audit entries</p>}
-                {auditLog.map(e => (
-                  <div key={e.id} className="audit-entry">
-                    <div className="audit-header">
-                      <strong>{e.user?.login}</strong>
-                      <span className="badge">{e.action}</span>
-                      <time>{new Date(e.createdAt).toLocaleString()}</time>
-                    </div>
-                    <div className="audit-detail">{e.field}: {e.oldValue} → {e.newValue}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
+        <Col xs={24} lg={8}>
+          <Card size="small" style={{ marginBottom: 12 }}>
+            <Descriptions column={1} size="small" title="Details">
+              <Descriptions.Item label="Priority"><Tag color={PRIORITY_COLORS[ticket.priority]}>{PRIORITY_LABELS[ticket.priority] || ticket.priority}</Tag></Descriptions.Item>
+              <Descriptions.Item label="Impact">{ticket.impact || '-'}</Descriptions.Item>
+              <Descriptions.Item label="Urgency">{ticket.urgency || '-'}</Descriptions.Item>
+              <Descriptions.Item label="Created">{new Date(ticket.createdAt).toLocaleString()}</Descriptions.Item>
+              <Descriptions.Item label="Updated">{new Date(ticket.updatedAt).toLocaleString()}</Descriptions.Item>
+            </Descriptions>
+          </Card>
 
-        <div className="detail-sidebar">
-          <div className="detail-section">
-            <h3>Details</h3>
-            <dl>
-              <dt>Priority</dt>
-              <dd>{ticket.priority || '-'}</dd>
-              <dt>Impact</dt>
-              <dd>{ticket.impact || '-'}</dd>
-              <dt>Urgency</dt>
-              <dd>{ticket.urgency || '-'}</dd>
-              <dt>Created</dt>
-              <dd>{new Date(ticket.createdAt).toLocaleString()}</dd>
-              <dt>Updated</dt>
-              <dd>{new Date(ticket.updatedAt).toLocaleString()}</dd>
-            </dl>
-          </div>
-
-          <div className="detail-section">
-            <h3>Agent</h3>
-            <div className="assignee-select">
-              <select onChange={e => handleAssign(Number(e.target.value))} value={ticket.assignedTo?.id || ''}>
-                <option value="">Unassigned</option>
-                {users.filter(u => ['AGENT', 'MANAGER', 'ADMIN'].includes(u.role)).map(u => (
-                  <option key={u.id} value={u.id}>{u.profile?.firstName || u.login}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <Card size="small" style={{ marginBottom: 12 }}>
+            <Typography.Text strong style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 8 }}>Agent</Typography.Text>
+            <Select onChange={handleAssign} value={ticket.assignedTo?.id || undefined} placeholder="Unassigned" style={{ width: '100%' }} allowClear>
+              {users.filter(u => ['AGENT', 'MANAGER', 'ADMIN'].includes(u.role)).map(u => (
+                <Select.Option key={u.id} value={u.id}>{u.profile?.firstName || u.login}</Select.Option>
+              ))}
+            </Select>
+          </Card>
 
           {ticket.ttrDeadline && (
-            <div className="detail-section">
-              <h3>SLA</h3>
-              <div className={`sla-timer ${isOverdue ? 'overdue' : ''}`}>
-                <div className="sla-label">TTR Deadline</div>
-                <div className="sla-time">{new Date(ticket.ttrDeadline).toLocaleString()}</div>
-                {isOverdue && <div className="sla-status">⚠ Overdue</div>}
-              </div>
-            </div>
+            <Card size="small" style={{ marginBottom: 12, ...(isOverdue ? { borderLeft: '3px solid #ff4757' } : {}) }}>
+              <Typography.Text strong style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>SLA - TTR Deadline</Typography.Text>
+              <Typography.Text style={{ fontSize: 14, fontWeight: 600, display: 'block' }}>{new Date(ticket.ttrDeadline).toLocaleString()}</Typography.Text>
+              {isOverdue && <Tag color="red" style={{ marginTop: 4 }}>OVERDUE</Tag>}
+            </Card>
           )}
 
-          {approvals.filter(a => a.ticketId === ticket.id).map(a => (
-            <div key={a.id} className="detail-section">
-              <h3>Approval</h3>
-              <div className={`approval-status status-${a.status}`}>
-                <span>Status: {a.status}</span>
-                {a.status === 'pending' && a.approverId === user.id && (
-                  <div className="approval-actions">
-                    <button className="btn-approve" onClick={() => handleApproval(a.id, 'approved')}>✓ Approve</button>
-                    <button className="btn-reject" onClick={() => handleApproval(a.id, 'rejected')}>✗ Reject</button>
-                  </div>
-                )}
-              </div>
-            </div>
+          {ticketApprovals.map(a => (
+            <Card key={a.id} size="small" style={{ marginBottom: 12, borderLeft: `3px solid ${a.status === 'approved' ? '#2ed573' : a.status === 'rejected' ? '#ff4757' : '#ffa502'}` }}>
+              <Typography.Text strong style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Approval</Typography.Text>
+              <Space><Tag>{a.status}</Tag></Space>
+              {a.status === 'pending' && a.approverId === user.id && (
+                <Space style={{ marginTop: 8 }}>
+                  <Button size="small" type="primary" icon={<CheckCircleOutlined />} onClick={() => handleApproval(a.id, 'approved')}>Approve</Button>
+                  <Button size="small" danger icon={<CloseCircleOutlined />} onClick={() => handleApproval(a.id, 'rejected')}>Reject</Button>
+                </Space>
+              )}
+            </Card>
           ))}
 
           {ticket.ciRelationships?.length > 0 && (
-            <div className="detail-section">
-              <h3>Related CIs</h3>
-              <ul className="ci-list">
-                {ticket.ciRelationships.map(r => (
-                  <li key={r.id}>{r.ci?.name} ({r.ci?.ciType})</li>
-                ))}
-              </ul>
-            </div>
+            <Card size="small">
+              <Typography.Text strong style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 8 }}>Related CIs</Typography.Text>
+              <List size="small" dataSource={ticket.ciRelationships} renderItem={r => <List.Item style={{ fontSize: 13 }}>{r.ci?.name} ({r.ci?.ciType})</List.Item>} />
+            </Card>
           )}
-        </div>
-      </div>
+        </Col>
+      </Row>
     </div>
   )
 }

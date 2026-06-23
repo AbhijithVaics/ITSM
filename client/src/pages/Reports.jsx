@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Card, Table, Progress, Tag, Typography } from 'antd'
 import { api } from '../api/client'
 
 export default function Reports() {
@@ -19,58 +20,45 @@ export default function Reports() {
   useEffect(() => { load() }, [load])
 
   return (
-    <div className="reports-page">
-      <div className="page-header"><h1>Reports</h1></div>
+    <div>
+      <Typography.Title level={4} style={{ marginBottom: 24 }}>Reports</Typography.Title>
 
-      <section className="detail-section">
-        <h3>Agent Performance</h3>
-        <table className="data-table">
-          <thead>
-            <tr><th>Agent</th><th>Total</th><th>Open</th><th>Closed</th><th>SLA Met</th><th>SLA Breached</th><th>SLA Compliance</th></tr>
-          </thead>
-          <tbody>
-            {agentStats.map(a => (
-              <tr key={a.agent.id}>
-                <td>{a.agent.profile?.firstName || a.agent.login}</td>
-                <td>{a.total}</td>
-                <td>{a.open}</td>
-                <td>{a.closed}</td>
-                <td style={{ color: 'var(--success)' }}>{a.slaMet}</td>
-                <td style={{ color: 'var(--danger)' }}>{a.slaBreached}</td>
-                <td>
-                  {a.slaCompliance !== null ? (
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: `${a.slaCompliance}%`, background: a.slaCompliance >= 90 ? 'var(--success)' : a.slaCompliance >= 70 ? 'var(--warning)' : 'var(--danger)' }} />
-                      <span>{a.slaCompliance}%</span>
-                    </div>
-                  ) : '-'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <Card size="small" style={{ marginBottom: 16 }} title="Agent Performance">
+        <Table
+          dataSource={agentStats}
+          rowKey={a => a.agent.id}
+          columns={[
+            { title: 'Agent', dataIndex: ['agent', 'profile', 'firstName'], render: (v, r) => v || r.agent?.login },
+            { title: 'Total', dataIndex: 'total' },
+            { title: 'Open', dataIndex: 'open' },
+            { title: 'Closed', dataIndex: 'closed' },
+            { title: 'SLA Met', dataIndex: 'slaMet', render: v => <span style={{ color: '#2ed573' }}>{v}</span> },
+            { title: 'SLA Breached', dataIndex: 'slaBreached', render: v => <span style={{ color: '#ff4757' }}>{v}</span> },
+            { title: 'SLA Compliance', render: (_, a) => a.slaCompliance !== null ? (
+              <Progress percent={Math.round(a.slaCompliance)} size="small" status={a.slaCompliance >= 90 ? 'success' : a.slaCompliance >= 70 ? 'normal' : 'exception'} />
+            ) : '-'},
+          ]}
+          pagination={false}
+          size="middle"
+        />
+      </Card>
 
-      <section className="detail-section">
-        <h3>Resolution Times (by Ticket Type)</h3>
-        <table className="data-table">
-          <thead>
-            <tr><th>Type</th><th>Count</th><th>Avg (hrs)</th><th>Min (hrs)</th><th>Max (hrs)</th></tr>
-          </thead>
-          <tbody>
-            {resolutionData.map(r => (
-              <tr key={r.type}>
-                <td><span className="badge">{r.type}</span></td>
-                <td>{r.count}</td>
-                <td>{r.avgHours}</td>
-                <td>{r.minHours}</td>
-                <td>{r.maxHours}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {resolutionData.length === 0 && <p className="empty-state">No resolved tickets yet.</p>}
-      </section>
+      <Card size="small" title="Resolution Times (by Ticket Type)">
+        <Table
+          dataSource={resolutionData}
+          rowKey="type"
+          columns={[
+            { title: 'Type', dataIndex: 'type', render: v => <Tag>{v}</Tag> },
+            { title: 'Count', dataIndex: 'count' },
+            { title: 'Avg (hrs)', dataIndex: 'avgHours' },
+            { title: 'Min (hrs)', dataIndex: 'minHours' },
+            { title: 'Max (hrs)', dataIndex: 'maxHours' },
+          ]}
+          pagination={false}
+          size="middle"
+          locale={{ emptyText: 'No resolved tickets yet.' }}
+        />
+      </Card>
     </div>
   )
 }

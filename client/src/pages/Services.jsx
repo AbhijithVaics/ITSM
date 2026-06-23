@@ -1,54 +1,57 @@
 import { useState, useEffect } from 'react'
+import { Card, Row, Col, Button, Modal, Form, Input, Tag, Typography, Space, List, message } from 'antd'
+import { PlusOutlined } from '@ant-design/icons'
 import { listServices, createService } from '../api/services'
 
 export default function Services() {
   const [services, setServices] = useState([])
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '' })
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form] = Form.useForm()
 
   useEffect(() => {
     listServices().then(setServices).catch(console.error)
   }, [])
 
-  const handleCreate = async (e) => {
-    e.preventDefault()
+  const handleCreate = async (values) => {
     try {
-      await createService(form)
-      setShowForm(false)
-      setForm({ name: '', description: '' })
+      await createService(values)
+      setModalOpen(false)
+      form.resetFields()
       setServices(await listServices())
-    } catch (err) { alert(err.message) }
+      message.success('Service created')
+    } catch (err) { message.error(err.message) }
   }
 
   return (
-    <div className="services-page">
-      <div className="page-header">
-        <h1>Service Catalog</h1>
-        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : 'Add Service'}</button>
-      </div>
+    <div>
+      <Space style={{ marginBottom: 24, justifyContent: 'space-between', width: '100%' }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>Service Catalog</Typography.Title>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>Add Service</Button>
+      </Space>
 
-      {showForm && (
-        <form className="form-card" onSubmit={handleCreate}>
-          <div className="form-group"><label>Name</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required /></div>
-          <div className="form-group"><label>Description</label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} /></div>
-          <button type="submit" className="btn-primary">Create</button>
-        </form>
-      )}
+      <Modal title="New Service" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
+        <Form layout="vertical" form={form} onFinish={handleCreate}>
+          <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="description" label="Description"><Input /></Form.Item>
+          <Button type="primary" htmlType="submit">Create</Button>
+        </Form>
+      </Modal>
 
-      <div className="service-grid">
+      <Row gutter={[16, 16]}>
         {services.map(s => (
-          <div key={s.id} className="service-card">
-            <h3>{s.name}</h3>
-            <p className="text-muted">{s.description}</p>
-            {s.subcategories?.length > 0 && (
-              <>
-                <h4>Subcategories</h4>
-                <ul>{s.subcategories.map(sub => <li key={sub.id}>{sub.name}</li>)}</ul>
-              </>
-            )}
-          </div>
+          <Col xs={24} sm={12} lg={8} key={s.id}>
+            <Card title={s.name} size="small" bodyStyle={{ paddingTop: 8 }}>
+              <Typography.Paragraph type="secondary">{s.description}</Typography.Paragraph>
+              {s.subcategories?.length > 0 && (
+                <>
+                  <Typography.Text strong style={{ fontSize: 12, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>Subcategories</Typography.Text>
+                  <List size="small" dataSource={s.subcategories} renderItem={sub => <List.Item>{sub.name}</List.Item>} />
+                </>
+              )}
+            </Card>
+          </Col>
         ))}
-      </div>
+      </Row>
     </div>
   )
 }

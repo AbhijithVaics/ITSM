@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Table, Button, Tag, Modal, Form, Input, Select, Typography, message, Space } from 'antd'
+import { PlusOutlined } from '@ant-design/icons'
 import { listUsers, createUser, updateUser } from '../api/users'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Users() {
   const [users, setUsers] = useState([])
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ login: '', email: '', password: '', role: 'USER', profile: {} })
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form] = Form.useForm()
+  const [loading, setLoading] = useState(false)
   const { user } = useAuth()
 
   const load = useCallback(async () => {
@@ -14,68 +17,75 @@ export default function Users() {
 
   useEffect(() => { load() }, [load])
 
-  const handleCreate = async (e) => {
-    e.preventDefault()
+  const handleCreate = async (values) => {
+    setLoading(true)
     try {
-      await createUser(form)
-      setShowForm(false)
-      setForm({ login: '', email: '', password: '', role: 'USER', profile: {} })
+      await createUser(values)
+      setModalOpen(false)
+      form.resetFields()
       load()
-    } catch (err) { alert(err.message) }
+      message.success('User created')
+    } catch (err) { message.error(err.message) } finally { setLoading(false) }
   }
 
   const handleToggleStatus = async (u) => {
+    const newStatus = u.status === 'ENABLED' ? 'DISABLED' : 'ENABLED'
     try {
-      await updateUser(u.id, { status: u.status === 'ENABLED' ? 'DISABLED' : 'ENABLED' })
+      await updateUser(u.id, { status: newStatus })
       load()
-    } catch (err) { alert(err.message) }
+      message.success(`User ${newStatus === 'ENABLED' ? 'enabled' : 'disabled'}`)
+    } catch (err) { message.error(err.message) }
   }
 
-  if (user?.role === 'MANAGER') return <div className="empty-state">User management restricted to Admins.</div>
+  if (user?.role === 'MANAGER') return <Typography.Text type="secondary">User management restricted to Admins.</Typography.Text>
 
   return (
-    <div className="users-page">
-      <div className="page-header">
-        <h1>Users</h1>
-        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : 'Add User'}</button>
-      </div>
+    <div>
+      <Space style={{ marginBottom: 24, justifyContent: 'space-between', width: '100%' }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>Users</Typography.Title>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>Add User</Button>
+      </Space>
 
-      {showForm && (
-        <form className="form-card" onSubmit={handleCreate}>
-          <div className="form-group"><label>Login</label><input value={form.login} onChange={e => setForm({...form, login: e.target.value})} required /></div>
-          <div className="form-group"><label>Email</label><input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required /></div>
-          <div className="form-group"><label>Password</label><input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required /></div>
-          <div className="form-group">
-            <label>Role</label>
-            <select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
-              <option value="USER">User</option>
-              <option value="AGENT">Agent</option>
-              <option value="MANAGER">Manager</option>
-              <option value="CHANGE_MANAGER">Change Manager</option>
-              <option value="ADMIN">Admin</option>
-              <option value="READ_ONLY">Read Only</option>
-            </select>
-          </div>
-          <button type="submit" className="btn-primary">Create</button>
-        </form>
-      )}
+      <Modal title="Create User" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
+        <Form layout="vertical" form={form} onFinish={handleCreate}>
+          <Form.Item name="login" label="Login" rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="password" label="Password" rules={[{ required: true }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item name="role" label="Role" initialValue="USER">
+            <Select>
+              <Select.Option value="USER">User</Select.Option>
+              <Select.Option value="AGENT">Agent</Select.Option>
+              <Select.Option value="MANAGER">Manager</Select.Option>
+              <Select.Option value="CHANGE_MANAGER">Change Manager</Select.Option>
+              <Select.Option value="ADMIN">Admin</Select.Option>
+              <Select.Option value="READ_ONLY">Read Only</Select.Option>
+            </Select>
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={loading} style={{ marginTop: 8 }}>Create</Button>
+        </Form>
+      </Modal>
 
-      <table className="data-table">
-        <thead>
-          <tr><th>Login</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
-        </thead>
-        <tbody>
-          {users.map(u => (
-            <tr key={u.id}>
-              <td>{u.login}</td>
-              <td>{u.email}</td>
-              <td><span className="badge">{u.role}</span></td>
-              <td><span className={`badge badge-${u.status?.toLowerCase()}`}>{u.status}</span></td>
-              <td><button className="btn-secondary" onClick={() => handleToggleStatus(u)}>{u.status === 'ENABLED' ? 'Disable' : 'Enable'}</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Table
+        dataSource={users}
+        rowKey="id"
+        columns={[
+          { title: 'Login', dataIndex: 'login' },
+          { title: 'Email', dataIndex: 'email' },
+          { title: 'Role', dataIndex: 'role', render: v => <Tag>{v}</Tag> },
+          { title: 'Status', dataIndex: 'status', render: v => <Tag color={v === 'ENABLED' ? 'green' : 'red'}>{v}</Tag> },
+          { title: 'Actions', render: (_, u) => (
+            <Button size="small" onClick={() => handleToggleStatus(u)}>{u.status === 'ENABLED' ? 'Disable' : 'Enable'}</Button>
+          )},
+        ]}
+        pagination={false}
+        size="middle"
+      />
     </div>
   )
 }

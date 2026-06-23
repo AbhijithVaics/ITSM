@@ -4,6 +4,9 @@
   "description": "VAICS ITSM - Express.js Backend Server",
   "main": "src/index.js",
   "type": "module",
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
@@ -14,11 +17,7 @@
     "db:seed": "node prisma/seed.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest"
   },
-  "keywords": [
-    "itsm",
-    "ticketing",
-    "vaics"
-  ],
+  "keywords": ["itsm", "ticketing", "vaics"],
   "author": "VAICS",
   "license": "MIT",
   "dependencies": {

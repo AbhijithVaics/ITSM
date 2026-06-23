@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Card, Descriptions, Tag, Tabs, Typography, List, Space } from 'antd'
 import { getCI, getCIImpact } from '../api/ci'
 import CIGraph from '../components/CIGraph'
 
@@ -8,7 +9,6 @@ export default function CIDetail() {
   const navigate = useNavigate()
   const [ci, setCI] = useState(null)
   const [impact, setImpact] = useState(null)
-  const [activeTab, setActiveTab] = useState('graph')
 
   const load = useCallback(async () => {
     try {
@@ -23,86 +23,54 @@ export default function CIDetail() {
 
   useEffect(() => { load() }, [load])
 
-  if (!ci) return <div className="loading">Loading...</div>
+  if (!ci) return <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.45)' }}>Loading...</div>
 
   return (
-    <div className="ci-detail">
-      <div className="page-header">
+    <div>
+      <Space align="start" style={{ marginBottom: 24, width: '100%', justifyContent: 'space-between' }}>
         <div>
-          <h1>{ci.name}</h1>
-          <p className="text-muted">{ci.description}</p>
+          <Typography.Title level={4} style={{ margin: 0 }}>{ci.name}</Typography.Title>
+          <Typography.Text type="secondary">{ci.description}</Typography.Text>
         </div>
-        <span className={`badge badge-${ci.status}`}>{ci.status}</span>
-      </div>
+        <Tag color={ci.status === 'production' ? 'green' : ci.status === 'inactive' ? 'orange' : 'red'}>{ci.status}</Tag>
+      </Space>
 
-      <div className="tab-bar">
-        <button className={`tab ${activeTab === 'graph' ? 'active' : ''}`} onClick={() => setActiveTab('graph')}>Relationship Graph</button>
-        <button className={`tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Details</button>
-        <button className={`tab ${activeTab === 'impact' ? 'active' : ''}`} onClick={() => setActiveTab('impact')}>Impact Analysis</button>
-      </div>
-
-      {activeTab === 'graph' && (
-        <div className="detail-section">
-          <h3>CI Relationship Graph</h3>
-          <p className="text-muted" style={{ marginBottom: 12 }}>Click a node to navigate. Blue=current CI, green=dependencies, orange=depended-by.</p>
-          <CIGraph ci={ci} inbound={ci.inboundRelationships} outbound={ci.outboundRelationships} />
-        </div>
-      )}
-
-      {activeTab === 'details' && (
-        <div className="detail-grid">
-          <div className="detail-section">
-            <h3>Attributes</h3>
-            <pre className="json-display">{JSON.stringify(ci.attributes, null, 2)}</pre>
-          </div>
-
-          <div className="detail-section">
-            <h3>Relationships</h3>
-            <h4>Depends On ({ci.outboundRelationships?.length || 0})</h4>
-            {ci.outboundRelationships?.length === 0 && <p className="text-muted">None</p>}
-            {ci.outboundRelationships?.map(r => (
-              <div key={r.id} className="relation-item">
-                <span className="clickable" onClick={() => navigate(`/cmdb/${r.targetCI?.id}`)} style={{ cursor: 'pointer', color: '#4f8cff' }}>{r.targetCI?.name}</span>
-                <span className="badge">{r.relationshipType}</span>
-              </div>
-            ))}
-            <h4 style={{ marginTop: 12 }}>Used By ({ci.inboundRelationships?.length || 0})</h4>
-            {ci.inboundRelationships?.length === 0 && <p className="text-muted">None</p>}
-            {ci.inboundRelationships?.map(r => (
-              <div key={r.id} className="relation-item">
-                <span className="clickable" onClick={() => navigate(`/cmdb/${r.sourceCI?.id}`)} style={{ cursor: 'pointer', color: '#2ed573' }}>{r.sourceCI?.name}</span>
-                <span className="badge">{r.relationshipType}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'impact' && (
-        <div className="detail-section">
-          <h3>Impact Analysis</h3>
-          {impact?.impactedCIs?.length > 0 && (
-            <>
-              <h4>Impacted CIs</h4>
-              {impact.impactedCIs.map(c => (
-                <div key={c.id} className="relation-item">
-                  <span className="clickable" onClick={() => navigate(`/cmdb/${c.id}`)} style={{ cursor: 'pointer', color: '#4f8cff' }}>{c.name}</span>
-                  <span className={`badge badge-${c.status}`}>{c.status}</span>
-                </div>
-              ))}
-            </>
-          )}
-          {impact?.relatedTickets?.length > 0 && (
-            <>
-              <h4 style={{ marginTop: 12 }}>Related Tickets</h4>
-              {impact.relatedTickets.map(t => (
-                <div key={t.id} className="ticket-ref-link clickable" onClick={() => navigate(`/tickets/${t.id}`)} style={{ cursor: 'pointer' }}>{t.ref} - {t.title} ({t.status})</div>
-              ))}
-            </>
-          )}
-          {(!impact?.impactedCIs?.length && !impact?.relatedTickets?.length) && <p className="empty-state">No impact data</p>}
-        </div>
-      )}
+      <Tabs
+        defaultActiveKey="graph"
+        items={[
+          { key: 'graph', label: 'Relationship Graph', children: (
+            <Card size="small">
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>Click a node to navigate. Blue = current CI, green = dependencies, orange = depended-by.</Typography.Paragraph>
+              <CIGraph ci={ci} inbound={ci.inboundRelationships} outbound={ci.outboundRelationships} />
+            </Card>
+          )},
+          { key: 'details', label: 'Details', children: (
+            <Card size="small">
+              <Typography.Text strong style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 12 }}>Attributes</Typography.Text>
+              <pre style={{ background: 'rgba(255,255,255,0.04)', padding: 12, borderRadius: 8, fontSize: 12, overflowX: 'auto' }}>{JSON.stringify(ci.attributes, null, 2)}</pre>
+            </Card>
+          )},
+          { key: 'impact', label: 'Impact Analysis', children: (
+            <div>
+              {impact?.impactedCIs?.length > 0 && (
+                <Card size="small" style={{ marginBottom: 12 }} title="Impacted CIs">
+                  <List size="small" dataSource={impact.impactedCIs} renderItem={c => (
+                    <List.Item><a onClick={() => navigate(`/cmdb/${c.id}`)}>{c.name}</a> <Tag>{c.status}</Tag></List.Item>
+                  )} />
+                </Card>
+              )}
+              {impact?.relatedTickets?.length > 0 && (
+                <Card size="small" title="Related Tickets">
+                  <List size="small" dataSource={impact.relatedTickets} renderItem={t => (
+                    <List.Item><a onClick={() => navigate(`/tickets/${t.id}`)}>{t.ref}</a> — {t.title} ({t.status})</List.Item>
+                  )} />
+                </Card>
+              )}
+              {(!impact?.impactedCIs?.length && !impact?.relatedTickets?.length) && <Typography.Text type="secondary">No impact data</Typography.Text>}
+            </div>
+          )},
+        ]}
+      />
     </div>
   )
 }

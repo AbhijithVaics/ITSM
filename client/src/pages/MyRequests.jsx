@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listTickets, getComments } from '../api/tickets'
+import { Table, Button, Tag, Typography, Space } from 'antd'
+import { PlusOutlined } from '@ant-design/icons'
+import { listTickets } from '../api/tickets'
 import { useAuth } from '../contexts/AuthContext'
+
+const TYPE_COLORS = { INCIDENT: '#ff4757', SERVICE_REQUEST: '#4f8cff', CHANGE: '#ffa502', PROBLEM: '#be5aff' }
 
 export default function MyRequests() {
   const [tickets, setTickets] = useState([])
@@ -15,35 +19,26 @@ export default function MyRequests() {
   const myTickets = tickets.filter(t => t.createdById === user.id)
 
   return (
-    <div className="my-requests">
-      <div className="page-header">
-        <h1>My Requests</h1>
-        <button className="btn-primary" onClick={() => navigate('/create-ticket')}>New Request</button>
-      </div>
-
-      {myTickets.length === 0 && <div className="empty-state">No requests yet.</div>}
-
-      <div className="request-list">
-        {myTickets.map(ticket => (
-          <TicketRow key={ticket.id} ticket={ticket} onClick={() => navigate(`/tickets/${ticket.id}`)} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function TicketRow({ ticket, onClick }) {
-  return (
-    <div className="request-card" onClick={onClick}>
-      <div className="request-header">
-        <span className="ticket-ref">{ticket.ref}</span>
-        <span className={`badge badge-status-${ticket.status}`}>{ticket.status}</span>
-      </div>
-      <div className="request-title">{ticket.title}</div>
-      <div className="request-meta">
-        <span>{ticket.type}</span>
-        <span>{new Date(ticket.createdAt).toLocaleDateString()}</span>
-      </div>
+    <div>
+      <Space style={{ marginBottom: 24, justifyContent: 'space-between', width: '100%' }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>My Requests</Typography.Title>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/create-ticket')}>New Request</Button>
+      </Space>
+      <Table
+        dataSource={myTickets}
+        rowKey="id"
+        onRow={t => ({ onClick: () => navigate(`/tickets/${t.id}`), style: { cursor: 'pointer' } })}
+        columns={[
+          { title: 'Ref', dataIndex: 'ref', render: (v, r) => <a onClick={() => navigate(`/tickets/${r.id}`)}>{v}</a> },
+          { title: 'Title', dataIndex: 'title' },
+          { title: 'Type', dataIndex: 'type', render: v => <Tag color={TYPE_COLORS[v]}>{v}</Tag> },
+          { title: 'Status', dataIndex: 'status', render: v => <Tag>{v}</Tag> },
+          { title: 'Created', dataIndex: 'createdAt', render: v => new Date(v).toLocaleDateString() },
+        ]}
+        locale={{ emptyText: 'No requests yet.' }}
+        pagination={false}
+        size="middle"
+      />
     </div>
   )
 }

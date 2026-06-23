@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Table, Select, Tag, Typography, Space } from 'antd'
 import { listCIs } from '../api/ci'
 
 export default function CMDB() {
@@ -14,40 +15,34 @@ export default function CMDB() {
   }, [filterType])
 
   return (
-    <div className="cmdb-page">
-      <div className="page-header">
-        <h1>Configuration Management</h1>
-        <div className="header-controls">
-          <select value={filterType} onChange={e => setFilterType(e.target.value)}>
-            <option value="">All Types</option>
-            <option value="Server">Server</option>
-            <option value="Application">Application</option>
-            <option value="NetworkDevice">Network Device</option>
-            <option value="Database">Database</option>
-            <option value="Middleware">Middleware</option>
-            <option value="VMware">VMware</option>
-            <option value="Storage">Storage</option>
-            <option value="PhysicalServer">Physical Server</option>
-          </select>
-        </div>
-      </div>
-
-      <table className="data-table">
-        <thead>
-          <tr><th>Name</th><th>Type</th><th>Status</th><th>Description</th></tr>
-        </thead>
-        <tbody>
-          {cis.map(ci => (
-            <tr key={ci.id} className="clickable" onClick={() => navigate(`/cmdb/${ci.id}`)}>
-              <td>{ci.name}</td>
-              <td><span className="badge">{ci.ciType}</span></td>
-              <td><span className={`badge badge-${ci.status}`}>{ci.status}</span></td>
-              <td className="text-muted">{ci.description}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {cis.length === 0 && <div className="empty-state">No configuration items found.</div>}
+    <div>
+      <Space style={{ marginBottom: 24, justifyContent: 'space-between', width: '100%' }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>Configuration Management</Typography.Title>
+        <Select allowClear placeholder="Type" style={{ width: 160 }} onChange={v => setFilterType(v || '')}>
+          <Select.Option value="Server">Server</Select.Option>
+          <Select.Option value="Application">Application</Select.Option>
+          <Select.Option value="NetworkDevice">Network Device</Select.Option>
+          <Select.Option value="Database">Database</Select.Option>
+          <Select.Option value="Middleware">Middleware</Select.Option>
+          <Select.Option value="VMware">VMware</Select.Option>
+          <Select.Option value="Storage">Storage</Select.Option>
+          <Select.Option value="PhysicalServer">Physical Server</Select.Option>
+        </Select>
+      </Space>
+      <Table
+        dataSource={cis}
+        rowKey="id"
+        onRow={ci => ({ onClick: () => navigate(`/cmdb/${ci.id}`), style: { cursor: 'pointer' } })}
+        columns={[
+          { title: 'Name', dataIndex: 'name' },
+          { title: 'Type', dataIndex: 'ciType', render: v => <Tag>{v}</Tag> },
+          { title: 'Status', dataIndex: 'status', render: v => <Tag color={v === 'production' ? 'green' : v === 'inactive' ? 'orange' : 'red'}>{v}</Tag> },
+          { title: 'Description', dataIndex: 'description', render: v => <Typography.Text type="secondary">{v}</Typography.Text> },
+        ]}
+        locale={{ emptyText: 'No configuration items found.' }}
+        pagination={false}
+        size="middle"
+      />
     </div>
   )
 }

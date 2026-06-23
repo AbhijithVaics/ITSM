@@ -69,10 +69,10 @@ async function main() {
   const ticketCounters = await prisma.ticketCounter.findMany()
   if (ticketCounters.length === 0) {
     const types = [
-      { type: 'INCIDENT', prefix: 'INC', sequence: 0 },
-      { type: 'SERVICE_REQUEST', prefix: 'SR', sequence: 0 },
-      { type: 'CHANGE', prefix: 'CHG', sequence: 0 },
-      { type: 'PROBLEM', prefix: 'PRB', sequence: 0 },
+      { id: 'INCIDENT', prefix: 'INC', sequence: 0 },
+      { id: 'SERVICE_REQUEST', prefix: 'SR', sequence: 0 },
+      { id: 'CHANGE', prefix: 'CHG', sequence: 0 },
+      { id: 'PROBLEM', prefix: 'PRB', sequence: 0 },
     ]
     await prisma.ticketCounter.createMany({ data: types })
     console.log('  Ticket counters initialized')

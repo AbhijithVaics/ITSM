@@ -13,6 +13,8 @@
     "vite": "^8.0.12"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.2.5",
+    "antd": "^6.4.4",
     "react-router-dom": "^6.30.4",
     "vis-data": "^8.0.4",
     "vis-network": "^10.1.0"
