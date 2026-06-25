@@ -138,7 +138,7 @@ export const LoginPage: React.FC = () => {
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
             <button
-              onClick={() => handleQuickFill("admin", "admin123")}
+              onClick={() => handleQuickFill("admin", "password123")}
               className="btn btn-secondary"
               style={{ padding: "6px 12px", fontSize: 12 }}
               disabled={submitting}
@@ -146,7 +146,7 @@ export const LoginPage: React.FC = () => {
               Admin
             </button>
             <button
-              onClick={() => handleQuickFill("agent1", "agent123")}
+              onClick={() => handleQuickFill("agent1", "password123")}
               className="btn btn-secondary"
               style={{ padding: "6px 12px", fontSize: 12 }}
               disabled={submitting}
@@ -154,7 +154,7 @@ export const LoginPage: React.FC = () => {
               Agent
             </button>
             <button
-              onClick={() => handleQuickFill("user1", "user123")}
+              onClick={() => handleQuickFill("requester1", "password123")}
               className="btn btn-secondary"
               style={{ padding: "6px 12px", fontSize: 12 }}
               disabled={submitting}
